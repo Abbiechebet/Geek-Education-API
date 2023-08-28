@@ -2,9 +2,9 @@
 import * as dotenv from 'dotenv';
 import express, { json } from 'express';
 import mongoose from 'mongoose';
-import { config } from './config/index.js';
-import { studentAuthRouter } from './routes/studentRoutes.js';
-import { educatorAuthRouter } from './routes/educatorRoutes.js';
+import { config } from './src/config/index.js';
+import { studentAuthRouter } from './src/routes/studentRoutes.js';
+import { educatorAuthRouter } from './src/routes/educatorRoutes.js';
 
 dotenv.config();
 const app = express();
