@@ -5,7 +5,7 @@ import { config } from '../config/index.js';
 import { generateEducatorToken } from '../utils/jwt.js';
 import { sendError } from '../customError/error.js';
 import { createRandomBytes, generateEmail, generateOTP, generatePasswordReset, mailTransport, passwordResetConfirm, } from '../utils/sendEmail.js';
-import { tokenVerificationModel } from '../models/tokenVerificationModel.js';
+import { tokenVerificationModel } from '../models/tokenVerificationmodel.js';
 import { resetTokenModel } from '../models/resetTokenModel.js';
 
 export const createAccount = async (req, res) => {
