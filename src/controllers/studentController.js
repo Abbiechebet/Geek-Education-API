@@ -66,79 +66,78 @@ export const createAccount = async (req, res) => {
 
 
 export const emailLogin = async (req, res) => {
-
   try {
     // Validate user registration data (joi validation)
     const { error, value } = studentLoginValidator(req.body);
-    if (error) return res.status(400).send(error.details[0].message)
+    if (error) return res.status(400).send(error.details[0].message);
 
     // destructure the data in the req.body
     const { email, password } = req.body;
 
-    // check if the user exists by email7
+    // check if the user exists by email
     const userExists = await studentModel.findOne({ email });
     if (!userExists) return sendError(res, 400, 'Email does not exist, please signup');
 
     // check if the password matches database
     const passwordExist = await bcrypt.compare(password, userExists.password);
-    if (!passwordExist) return sendError(res, 400, 'invalid credentials')
+    if (!passwordExist) return sendError(res, 400, 'Invalid credentials');
 
-    
-    // generate an otp for user
+    // Generate a new OTP
     const OTP = generateOTP();
 
-    // hash otp
-    const saltOTP = +config.bcrypt_OTP_salt_round
+    // Hash the OTP
+    const saltOTP = +config.bcrypt_OTP_salt_round;
     const hashedOTP = bcrypt.hashSync(OTP, saltOTP);
 
-   // save hashed token generated into the verification-tokens collections, token is valid for 1 hour
-   const tokenVerification = await tokenVerificationModel.create({ owner: userExists._id,token: hashedOTP })
+    // Store the hashed OTP in the user's data
+    await studentModel.findOneAndUpdate(
+      { email },
+      { otp: hashedOTP }, // Store the OTP in the user's data
+      { runValidators: false }
+    );
 
-    // send OTP mail
+    // Send OTP mail
     mailTransport().sendMail({
       from: "abbier547@gmail.com",
       to: userExists.email,
       subject: "Get the Access Key",
-      html: generateEmail(OTP, userExists.firstName)
-    })
+      html: generateEmail(OTP, userExists.firstName),
+    });
 
-    // if user already has a token and token valid, do not generate new token
+    // If user already has a token and token is valid, do not generate a new token
 
-    // generate token
+    // Generate a new token
     const token = generateToken(userExists);
 
     let oldTokens = userExists.tokens || [];
     if (oldTokens.length) {
       oldTokens = oldTokens.filter(t => {
-        const timeDiff = (Date.now() - parseInt(t.signedAt)) / 1000
+        const timeDiff = (Date.now() - parseInt(t.signedAt)) / 1000;
         if (timeDiff < 86400) {
           console.log(t);
           return t;
         } else {
           return {};
         }
-      })
+      });
     }
 
+    await studentModel.findByIdAndUpdate(userExists._id, { tokens: [...oldTokens, { token, signedAt: Date.now().toString() }] }, { runValidators: true });
 
-    await studentModel.findByIdAndUpdate(userExists._id, { tokens: [...oldTokens, { token, signedAt: Date.now().toString() }] }, { runValidators: true })
-
-    // when everything is checked successfully
+    // When everything is checked successfully
     res.status(200).header('auth_token', token).json({
       status: 'Success',
-      message: 'Student logged in successfully confirm your Email for an OTP',
+      message: 'Student logged in successfully. Confirm your Email for an OTP',
       auth_token: token,
-      verificationToken: tokenVerification
-    })
+    });
 
   } catch (error) {
     res.status(400).json({
       status: 'Failed',
-      message: error.message
-    })
+      message: error.message,
+    });
   }
-
-}
+};
 
 
 
@@ -239,5 +238,99 @@ export const resetPassword = async (req, res) => {
       message: error.message
     })
   }
-
 }
+export const resendOTP = async (req, res) => {
+  try {
+    // Get the authenticated user's email
+    const { email } = req.user;
+
+    // Retrieve the user data
+    const userExists = await studentModel.findOne({ email });
+
+    if (!userExists) {
+      return sendError(res, 400, 'User not found');
+    }
+
+    // Generate a new OTP
+    const newOTP = generateOTP();
+
+    // Hash the new OTP
+    const saltOTP = +config.bcrypt_OTP_salt_round;
+    const hashedNewOTP = bcrypt.hashSync(newOTP, saltOTP);
+
+    // Invalidate the existing OTP (if it exists)
+    await studentModel.findOneAndUpdate(
+      { email },
+      { $unset: { otp: 1 } }, 
+      { runValidators: false }
+    );
+
+    // Save the new OTP into the user's data
+    await studentModel.findOneAndUpdate({ email }, { otp: hashedNewOTP });
+
+    // Send OTP mail with the newOTP value inserted into the HTML template
+    mailTransport().sendMail({
+      from: 'abbier547@gmail.com',
+      to: email,
+      subject: 'Reset OTP',
+      html: generateEmail(newOTP, userExists.firstName), 
+    });
+
+    res.status(200).json({
+      status: 'Success',
+      message: 'A new OTP has been sent to your email, you can proceed to log in to your account',
+    });
+  } catch (error) {
+    console.error('Error:', error.message);
+    res.status(400).json({
+      status: 'Failed',
+      message: error.message,
+    });
+  }
+};
+
+export const verifyOTP = async (req, res) => {
+  try {
+    // Get the authenticated user's email
+    const { email } = req.user;
+
+    // Get the OTP sent in the request body
+    const { otp } = req.body;
+
+    // Find the user in the database
+    const user = await studentModel.findOne({ email });
+
+    // Check if the user exists
+    if (!user) return sendError(res, 400, 'User not found');
+
+    // Check if the user has an OTP
+    if (!user.otp) return sendError(res, 400, 'No OTP found for the user');
+
+    // Compare the provided OTP with the hashed OTP stored in the database
+    const isOTPValid = await bcrypt.compare(otp, user.otp);
+
+    if (isOTPValid) {
+      // If OTP is valid, you can clear the OTP field in the user's data
+      await studentModel.findOneAndUpdate(
+        { email },
+        { $unset: { otp: 1 } },
+        { runValidators: false }
+      );
+
+      // You can also perform other actions, like setting the user as verified
+
+      return res.status(200).json({
+        status: 'Success',
+        message: 'OTP verified successfully. Welcome to Geek Educational App.',
+      });
+    } else {
+      return sendError(res, 400, 'Invalid OTP');
+    }
+  } catch (error) {
+    console.error('Error:', error.message);
+    res.status(400).json({
+      status: 'Failed',
+      message: error.message,
+    });
+  }
+};
