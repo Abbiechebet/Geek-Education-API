@@ -2,6 +2,7 @@
 import * as dotenv from 'dotenv';
 import express, { json } from 'express';
 import mongoose from 'mongoose';
+import cors from 'cors';
 import { config } from './src/config/index.js';
 import { studentAuthRouter } from './src/routes/studentRoutes.js';
 import { educatorAuthRouter } from './src/routes/educatorRoutes.js';
@@ -16,6 +17,7 @@ mongoose
 .catch(err => console.error('Error connecting to MongoDB:', err));
 
 app.use(json()); 
+app.use(cors()); 
 
 app.use('/api/v1/student', studentAuthRouter);
 app.use('/api/v1/educator', educatorAuthRouter);
